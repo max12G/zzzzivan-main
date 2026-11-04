@@ -1,0 +1,19 @@
+[project]
+name = "arch"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "dotenv>=0.9.9",
+    "flask>=3.0.3",
+    "mysql-connector>=2.2.9",
+    "requests>=2.32.4",
+]
+
+[project.scripts]
+arch = "arch:main"
+
+[build-system]
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"

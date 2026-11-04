@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroAPI — Чат</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+</head>
+<body>
+
+<div class="app">
+
+    <!-- ========== САЙДБАР ========== -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-mark"><i class="ri-brain-line"></i></div>
+            <div class="logo-text">Neuro<span>API</span></div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="nav-group-title">Рабочее пространство</div>
+            <a href="#" class="nav-item active"><i class="ri-chat-3-line"></i><span>Чат</span></a>
+            <a href="#" class="nav-item"><i class="ri-robot-2-line"></i><span>Модели</span></a>
+            <a href="#" class="nav-item"><i class="ri-key-2-line"></i><span>API-ключи</span></a>
+
+            <div class="nav-group-title">Аккаунт</div>
+            <a href="#" class="nav-item"><i class="ri-wallet-3-line"></i><span>Платежи</span></a>
+            <a href="#" class="nav-item"><i class="ri-settings-3-line"></i><span>Настройки</span></a>
+            <a href="https://openrouter.ai/docs" target="_blank" class="nav-item">
+                <i class="ri-book-2-line"></i><span>Документация</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="user-card">
+                <div class="avatar">{{ (username or 'U')[0]|upper }}</div>
+                <div class="user-info">
+                    <div class="user-name">{{ username or 'Пользователь' }}</div>
+                    <div class="user-plan"><i class="ri-flashlight-line"></i> Mistral Free</div>
+                </div>
+            </div>
+            <a href="/logout" class="nav-item nav-logout">
+                <i class="ri-logout-box-r-line"></i><span>Выйти</span>
+            </a>
+        </div>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- ========== ОСНОВНАЯ ЧАСТЬ ========== -->
+    <main class="main">
+
+        <header class="topbar">
+            <button class="icon-btn menu-toggle" id="menuToggle"><i class="ri-menu-line"></i></button>
+
+            <div class="model-picker">
+                <i class="ri-robot-2-line"></i>
+                <select id="modelSelect">
+                    {% for m in models %}
+                    <option value="{{ m.id }}" title="{{ m.desc }}">{{ m.name }}</option>
+                    {% endfor %}
+                </select>
+                <span class="badge-free">MISTRAL</span>
+            </div>
+
+            <div class="topbar-right">
+                <div class="balance-chip" title="Баланс">
+                    <i class="ri-wallet-3-line"></i>
+                    <span id="balanceChip">{{ '%.2f'|format(balance or 0) }} ₽</span>
+                </div>
+
+                <button class="btn btn-primary btn-sm" id="openTopupBtn">
+                    <i class="ri-add-line"></i> Пополнить
+                </button>
+                <button class="icon-btn" id="clearChatBtn" title="Очистить чат">
+                    <i class="ri-delete-bin-6-line"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- ========== ЧАТ ========== -->
+        <div class="chat-shell">
+            <div class="chat-messages" id="chatMessages">
+
+                <div class="chat-empty" id="chatEmpty">
+                    <div class="empty-orb">
+                        <i class="ri-sparkling-2-line"></i>
+                    </div>
+                    <h2>Чем помочь?</h2>
+                    <p>Задайте вопрос, и одна из бесплатных моделей ответит. Все модели доступны без оплаты.</p>
+
+                    <div class="quick-prompts">
+                        <button class="quick-prompt" data-prompt="Объясни, что такое API простыми словами">
+                            <i class="ri-lightbulb-line"></i>
+                            <span>Что такое API?</span>
+                        </button>
+                        <button class="quick-prompt" data-prompt="Напиши функцию на Python для сортировки списка">
+                            <i class="ri-code-s-slash-line"></i>
+                            <span>Код на Python</span>
+                        </button>
+                        <button class="quick-prompt" data-prompt="Придумай 5 идей для стартапа в сфере AI">
+                            <i class="ri-rocket-2-line"></i>
+                            <span>Идеи для стартапа</span>
+                        </button>
+                        <button class="quick-prompt" data-prompt="Переведи на английский: 'Привет, как дела?'">
+                            <i class="ri-translate-2"></i>
+                            <span>Перевод</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Поле ввода -->
+            <div class="chat-input-wrap">
+                <form class="chat-input" id="chatForm">
+                    <textarea id="chatInput" placeholder="Спросите что-нибудь… (Enter — отправить, Shift+Enter — новая строка)" rows="1"></textarea>
+                    <button type="submit" class="send-btn" id="sendBtn" title="Отправить">
+                        <i class="ri-arrow-up-line"></i>
+                    </button>
+                </form>
+                <div class="chat-hint">
+                    Модели могут ошибаться. Проверяйте важную информацию.
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- ========== МОДАЛКА ПОПОЛНЕНИЯ ========== -->
+<div class="modal-overlay" id="topupModal">
+    <div class="modal-window">
+        <button class="modal-close" id="closeTopupBtn">&times;</button>
+
+        <div class="modal-icon"><i class="ri-wallet-3-line"></i></div>
+        <div class="modal-title">Пополнение баланса</div>
+        <div class="modal-subtitle">Оплата картой, СБП или криптой</div>
+
+        <form id="topupForm">
+            <div class="preset-grid">
+                <button type="button" class="preset" data-amount="500">500 ₽</button>
+                <button type="button" class="preset active" data-amount="1000">1 000 ₽</button>
+                <button type="button" class="preset" data-amount="2000">2 000 ₽</button>
+                <button type="button" class="preset" data-amount="5000">5 000 ₽</button>
+            </div>
+
+            <div class="form-group-modal">
+                <label for="topupAmount">Своя сумма</label>
+                <div class="input-with-suffix">
+                    <input type="number" id="topupAmount" value="1000" min="100" step="50" required>
+                    <span class="suffix">₽</span>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" id="cancelTopup">Отмена</button>
+                <button type="submit" class="btn btn-success">
+                    <i class="ri-lock-line"></i> Оплатить <span id="payAmountLabel">1 000 ₽</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>
