@@ -1,22 +1,19 @@
-import mysql.connector
-from mysql.connector import Error
+import os
+import sqlite3
+
+
+db_path = os.path.join(os.path.dirname(__file__), "data", "app.db")
+os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
 try:
-    cnx = mysql.connector.connect(
-        host="185.114.247.43",
-        port=3306,
-        database="sch688_vvedenie",
-        user="sch688_vvedenie",
-        password="Qwerty123",
-        connection_timeout=5,
-    )
-    print("✅ Подключение OK")
+    cnx = sqlite3.connect(db_path)
+    print(f"✅ Локальная БД доступна: {db_path}")
 
     cur = cnx.cursor()
-    cur.execute("SHOW TABLES")
-    print("Таблицы:", [r[0] for r in cur.fetchall()])
+    cur.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    print("Таблицы:", [row[0] for row in cur.fetchall()])
 
-    cur.execute("DESCRIBE users")
+    cur.execute("PRAGMA table_info(users)")
     print("Структура users:")
     for row in cur.fetchall():
         print("  ", row)
@@ -24,6 +21,7 @@ try:
     cur.execute("SELECT COUNT(*) FROM users")
     print("Пользователей в базе:", cur.fetchone()[0])
 
-    cur.close(); cnx.close()
-except Error as e:
-    print("❌ Ошибка БД:", e)
+    cur.close()
+    cnx.close()
+except sqlite3.Error as error:
+    print("❌ Ошибка локальной БД:", error)

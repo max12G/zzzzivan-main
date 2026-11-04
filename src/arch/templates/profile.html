@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroAPI — Профиль</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/profile.css">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
+    <script src="/static/js/theme.js"></script>
+</head>
+<body>
+<div class="profile-page">
+    <header class="profile-header">
+        <a href="/dashboard" class="brand">
+            <span class="logo-mark"><i class="ri-brain-line"></i></span>
+            <span class="logo-text">Neuro<span>API</span></span>
+        </a>
+        <div class="profile-header-actions">
+            <button class="icon-btn theme-toggle" data-theme-toggle aria-label="Включить тёмную тему" title="Тема"><i class="ri-moon-line"></i></button>
+            <a href="/dashboard" class="btn btn-ghost"><i class="ri-arrow-left-line"></i> В чат</a>
+        </div>
+    </header>
+
+    <main class="profile-content">
+        <div class="profile-heading">
+            <div>
+                <p class="eyebrow">Аккаунт</p>
+                <h1>Профиль</h1>
+                <p class="profile-description">Управляйте личными данными и балансом аккаунта.</p>
+            </div>
+            <div class="profile-avatar">{{ (username or 'U')[0]|upper }}</div>
+        </div>
+
+        <div class="profile-grid">
+            <section class="profile-card balance-card-profile">
+                <div class="card-icon"><i class="ri-wallet-3-line"></i></div>
+                <div>
+                    <p class="card-label">Текущий баланс</p>
+                    <strong id="profileBalance">0.00 ₽</strong>
+                </div>
+                <form id="topupProfileForm" class="topup-inline">
+                    <label for="profileTopupAmount">Сумма пополнения</label>
+                    <div class="inline-input">
+                        <input id="profileTopupAmount" type="number" min="1" step="1" value="1000" required>
+                        <span>₽</span>
+                    </div>
+                    <button class="btn btn-primary" type="submit"><i class="ri-add-line"></i> Пополнить</button>
+                </form>
+            </section>
+
+            <section class="profile-card">
+                <div class="section-title"><i class="ri-user-settings-line"></i><h2>Личные данные</h2></div>
+                <form id="profileForm" class="profile-form">
+                    <label>Имя
+                        <input id="profileUsername" type="text" required maxlength="100">
+                    </label>
+                    <label>Почта
+                        <input id="profileEmail" type="email" required maxlength="150">
+                    </label>
+                    <label>Текущий пароль
+                        <input id="profileCurrentPassword" type="password" autocomplete="current-password" required>
+                    </label>
+                    <button class="btn btn-primary" type="submit">Сохранить данные</button>
+                </form>
+            </section>
+
+            <section class="profile-card">
+                <div class="section-title"><i class="ri-lock-password-line"></i><h2>Смена пароля</h2></div>
+                <form id="passwordForm" class="profile-form">
+                    <label>Текущий пароль
+                        <input id="passwordCurrent" type="password" autocomplete="current-password" required>
+                    </label>
+                    <label>Новый пароль
+                        <input id="passwordNew" type="password" minlength="8" autocomplete="new-password" required>
+                    </label>
+                    <label>Повторите новый пароль
+                        <input id="passwordConfirm" type="password" minlength="8" autocomplete="new-password" required>
+                    </label>
+                    <button class="btn btn-primary" type="submit">Изменить пароль</button>
+                </form>
+            </section>
+        </div>
+    </main>
+</div>
+<div class="toast-container" id="toastContainer"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="/static/js/profile.js"></script>
+</body>
+</html>

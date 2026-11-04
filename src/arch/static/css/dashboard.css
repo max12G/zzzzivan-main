@@ -1,8 +1,8 @@
 :root {
-    --bg: #f7f8fb;
+    --bg: #f5f7fb;
     --panel: #ffffff;
     --panel-2: #f2f4f8;
-    --border: #e6e8ee;
+    --border: #e3e7f0;
     --text: #0f1220;
     --text-2: #5b6178;
     --text-3: #969bb0;
@@ -14,10 +14,23 @@
     --radius: 14px;
     --radius-sm: 10px;
     --shadow-sm: 0 1px 2px rgba(15,18,32,.05);
-    --shadow: 0 4px 16px rgba(15,18,32,.06);
+    --shadow: 0 8px 24px rgba(15,18,32,.07);
     --shadow-lg: 0 20px 50px rgba(15,18,32,.18);
     --sidebar-w: 240px;
     --topbar-h: 64px;
+}
+
+:root[data-theme="dark"] {
+    --bg: #11131d;
+    --panel: #191c29;
+    --panel-2: #222638;
+    --border: #30364a;
+    --text: #f3f5fb;
+    --text-2: #aab1c5;
+    --text-3: #7d859e;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.2);
+    --shadow: 0 8px 24px rgba(0,0,0,.24);
+    --shadow-lg: 0 20px 50px rgba(0,0,0,.45);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -63,7 +76,7 @@ body {
 .logo-text span { color: var(--primary); }
 
 .sidebar-nav {
-    padding: 16px 12px;
+    padding: 20px 12px;
     flex: 1;
     overflow-y: auto;
 }
@@ -94,6 +107,14 @@ body {
     padding: 8px; border-radius: 10px;
     margin-bottom: 4px;
 }
+.profile-link { color: inherit; text-decoration: none; cursor: pointer; transition: background .15s ease; }
+.profile-link:hover { background: var(--panel-2); }
+.profile-link-icon { margin-left: auto; color: var(--text-3); font-size: 18px; }
+.user-email {
+    color: var(--text-3); font-size: 11px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 142px;
+}
 .avatar {
     width: 34px; height: 34px; border-radius: 50%;
     background: linear-gradient(135deg, var(--primary), var(--primary-2));
@@ -103,9 +124,6 @@ body {
 .avatar-sm { width: 30px; height: 30px; font-size: 12px; }
 .user-info { overflow: hidden; }
 .user-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user-plan { font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 3px; }
-.user-plan i { color: var(--warning); }
-
 .nav-logout { color: var(--text-2); }
 
 .sidebar-overlay {
@@ -128,14 +146,14 @@ body {
     background: var(--panel);
     border-bottom: 1px solid var(--border);
     display: flex; align-items: center; gap: 16px;
-    padding: 0 20px;
+    padding: 0 24px;
     flex-shrink: 0;
 }
 .menu-toggle { display: none; }
 
 .model-picker {
     display: flex; align-items: center; gap: 8px;
-    background: var(--panel-2);
+    background: var(--panel);
     padding: 6px 12px;
     border-radius: 10px;
     border: 1px solid var(--border);
@@ -196,6 +214,7 @@ body {
     flex-shrink: 0;
 }
 .icon-btn:hover { background: var(--panel-2); color: var(--text); }
+.theme-toggle { color: var(--text-2); }
 
 /* ============ CHAT ============ */
 .chat-shell {
@@ -205,7 +224,7 @@ body {
 
 .chat-messages {
     flex: 1; overflow-y: auto;
-    padding: 32px 20px 20px;
+    padding: 40px 24px 24px;
     scroll-behavior: smooth;
 }
 .chat-messages::-webkit-scrollbar { width: 6px; }
@@ -213,7 +232,7 @@ body {
 
 /* Пустой чат */
 .chat-empty {
-    max-width: 640px; margin: 6vh auto 0;
+    max-width: 680px; margin: 10vh auto 0;
     text-align: center;
     padding: 20px;
 }
@@ -239,7 +258,7 @@ body {
 }
 .quick-prompt {
     display: flex; align-items: center; gap: 10px;
-    padding: 14px;
+    padding: 16px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 12px; cursor: pointer;
@@ -300,6 +319,7 @@ body {
     overflow-x: auto; margin: 10px 0;
     font-size: 13px; line-height: 1.55;
 }
+:root[data-theme="dark"] .msg-content pre { background: #0b0d14; }
 .msg-content pre code { background: transparent; padding: 0; color: inherit; }
 .msg-content ul, .msg-content ol { padding-left: 22px; margin-bottom: 10px; }
 .msg-content li { margin-bottom: 4px; }
@@ -333,7 +353,7 @@ body {
 
 /* Поле ввода */
 .chat-input-wrap {
-    padding: 16px 20px 20px;
+    padding: 18px 24px 24px;
     background: linear-gradient(to top, var(--bg) 70%, transparent);
     flex-shrink: 0;
 }

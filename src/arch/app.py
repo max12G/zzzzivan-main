@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, Response
 from werkzeug.security import generate_password_hash, check_password_hash
-import mysql.connector
-from mysql.connector import Error
+import sqlite3
 import os, json, requests, traceback
 from dotenv import load_dotenv
 
@@ -14,16 +13,11 @@ app.secret_key = os.environ.get('SECRET_KEY', 'tvoja_super_sekretnaja_kluch_fraz
 MISTRAL_API_KEY = os.environ.get('MISTRAL_API_KEY', '').strip()
 MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions'
 
-# ============ ПОДКЛЮЧЕНИЕ К БД ============
-DB_CONFIG = {
-    'host':     os.environ.get('DB_HOST', '185.114.247.43'),
-    'port':     int(os.environ.get('DB_PORT', 3306)),
-    'database': os.environ.get('DB_NAME', 'sch688_vvedenie'),
-    'user':     os.environ.get('DB_USER', 'sch688_vvedenie'),
-    'password': os.environ.get('DB_PASS', 'Qwerty123'),
-    'charset':  'utf8mb4',
-    'connection_timeout': 10,
-}
+# ============ ЛОКАЛЬНАЯ БД ============
+DB_PATH = os.environ.get(
+    'LOCAL_DB_PATH',
+    os.path.join(os.path.dirname(__file__), 'data', 'app.db'),
+)
 
 MODELS = [
     {'id': 'mistral-small-latest', 'name': 'Mistral Small',      'vendor': 'Mistral', 'desc': 'Умная модель общего назначения'},
@@ -39,8 +33,11 @@ MODELS = [
 
 def get_db_connection():
     try:
-        return mysql.connector.connect(**DB_CONFIG)
-    except Error as e:
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        cnx = sqlite3.connect(DB_PATH)
+        cnx.row_factory = sqlite3.Row
+        return cnx
+    except sqlite3.Error as e:
         print(f"[DB] Ошибка подключения: {e}")
         return None
 
@@ -58,25 +55,25 @@ def ensure_schema():
         # Создаём таблицу users
         cur.execute("""
             CREATE TABLE IF NOT EXISTS `users` (
-                `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `username` VARCHAR(100) NOT NULL,
-                `email` VARCHAR(150) NOT NULL UNIQUE,
-                `password_hash` VARCHAR(255) NOT NULL,
-                `balance` DECIMAL(10,2) NOT NULL DEFAULT 0,
-                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                balance REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
         """)
 
         # Проверяем, есть ли колонка balance (если таблица была создана ранее)
-        cur.execute("SHOW COLUMNS FROM `users` LIKE 'balance'")
-        if not cur.fetchone():
+        columns = {row['name'] for row in cur.execute("PRAGMA table_info(users)")}
+        if 'balance' not in columns:
             print("[DB] Добавляю колонку balance…")
-            cur.execute("ALTER TABLE `users` ADD COLUMN `balance` DECIMAL(10,2) NOT NULL DEFAULT 0")
+            cur.execute("ALTER TABLE users ADD COLUMN balance REAL NOT NULL DEFAULT 0")
 
         cnx.commit()
         print("[DB] Схема готова ✅")
         return True
-    except Error as e:
+    except sqlite3.Error as e:
         print(f"[DB] Ошибка при создании схемы: {e}")
         traceback.print_exc()
         return False
@@ -99,20 +96,20 @@ def user_register():
     if not cnx:
         return jsonify({'status': 'error', 'message': 'Не удалось подключиться к БД'}), 500
 
-    cur = cnx.cursor(dictionary=True)
+    cur = cnx.cursor()
     try:
-        cur.execute('SELECT id FROM users WHERE email = %s', (login,))
+        cur.execute('SELECT id FROM users WHERE email = ?', (login,))
         if cur.fetchone():
             return jsonify({'status': 'error', 'message': 'Email уже занят'}), 409
 
         cur.execute(
-            'INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s)',
+            'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
             (name, login, password_hash)
         )
         cnx.commit()
         print(f"[REG] Зарегистрирован: {login}")
         return jsonify({'status': 'ok', 'message': 'Регистрация успешна'})
-    except Error as e:
+    except sqlite3.Error as e:
         cnx.rollback()
         print(f"[REG] Ошибка: {e}")
         traceback.print_exc()
@@ -133,9 +130,9 @@ def user_login():
     if not cnx:
         return jsonify({'status': 'error', 'message': 'Не удалось подключиться к БД'}), 500
 
-    cur = cnx.cursor(dictionary=True)
+    cur = cnx.cursor()
     try:
-        cur.execute('SELECT id, username, email, password_hash FROM users WHERE email = %s', (login,))
+        cur.execute('SELECT id, username, email, password_hash FROM users WHERE email = ?', (login,))
         user = cur.fetchone()
 
         if user and check_password_hash(user['password_hash'], password):
@@ -147,7 +144,7 @@ def user_login():
 
         print(f"[LOGIN] Провал: {login}")
         return jsonify({'status': 'error', 'message': 'Неверный логин или пароль'}), 401
-    except Error as e:
+    except sqlite3.Error as e:
         print(f"[LOGIN] Ошибка: {e}")
         traceback.print_exc()
         return jsonify({'status': 'error', 'message': f'Ошибка БД: {e}'}), 500
@@ -179,10 +176,10 @@ def get_balance():
         return 0.0
     cur = cnx.cursor()
     try:
-        cur.execute('SELECT balance FROM users WHERE id = %s', (session['user_id'],))
+        cur.execute('SELECT balance FROM users WHERE id = ?', (session['user_id'],))
         row = cur.fetchone()
         return float(row[0]) if row and row[0] is not None else 0.0
-    except Error:
+    except sqlite3.Error:
         return 0.0
     finally:
         cur.close(); cnx.close()
@@ -195,9 +192,17 @@ def dashboard():
     return render_template(
         'dashboard.html',
         username=session.get('username'),
+        email=session.get('email'),
         models=MODELS,
         balance=get_balance(),
     )
+
+
+@app.route('/profile')
+def profile():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('profile.html', username=session.get('username'))
 
 
 # ============ API: МОДЕЛИ / БАЛАНС / ПОПОЛНЕНИЕ ============
@@ -207,6 +212,108 @@ def api_models():
     if 'user_id' not in session:
         return jsonify({'error': 'Не авторизован'}), 401
     return jsonify({'models': MODELS})
+
+
+@app.route('/api/profile')
+def api_profile():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Не авторизован'}), 401
+
+    cnx = get_db_connection()
+    if not cnx:
+        return jsonify({'error': 'Ошибка БД'}), 500
+    try:
+        row = cnx.execute(
+            'SELECT username, email, balance FROM users WHERE id = ?',
+            (session['user_id'],),
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Пользователь не найден'}), 404
+        return jsonify({
+            'username': row['username'],
+            'email': row['email'],
+            'balance': float(row['balance'] or 0),
+        })
+    except sqlite3.Error as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cnx.close()
+
+
+@app.route('/api/profile', methods=['PUT'])
+def update_profile():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Не авторизован'}), 401
+
+    data = request.get_json(silent=True) or {}
+    username = str(data.get('username', '')).strip()
+    email = str(data.get('email', '')).strip().lower()
+    current_password = data.get('current_password', '')
+    if not username or not email or '@' not in email:
+        return jsonify({'error': 'Введите корректные имя и почту'}), 400
+
+    cnx = get_db_connection()
+    if not cnx:
+        return jsonify({'error': 'Ошибка БД'}), 500
+    try:
+        user = cnx.execute(
+            'SELECT password_hash FROM users WHERE id = ?',
+            (session['user_id'],),
+        ).fetchone()
+        if not user or not check_password_hash(user['password_hash'], current_password):
+            return jsonify({'error': 'Неверный текущий пароль'}), 400
+
+        cnx.execute(
+            'UPDATE users SET username = ?, email = ? WHERE id = ?',
+            (username, email, session['user_id']),
+        )
+        cnx.commit()
+        session['username'] = username
+        session['email'] = email
+        return jsonify({'status': 'ok'})
+    except sqlite3.IntegrityError:
+        cnx.rollback()
+        return jsonify({'error': 'Эта почта уже используется'}), 409
+    except sqlite3.Error as e:
+        cnx.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cnx.close()
+
+
+@app.route('/api/profile/password', methods=['POST'])
+def change_password():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Не авторизован'}), 401
+
+    data = request.get_json(silent=True) or {}
+    current_password = data.get('current_password', '')
+    new_password = data.get('new_password', '')
+    if len(new_password) < 8:
+        return jsonify({'error': 'Новый пароль должен быть не короче 8 символов'}), 400
+
+    cnx = get_db_connection()
+    if not cnx:
+        return jsonify({'error': 'Ошибка БД'}), 500
+    try:
+        user = cnx.execute(
+            'SELECT password_hash FROM users WHERE id = ?',
+            (session['user_id'],),
+        ).fetchone()
+        if not user or not check_password_hash(user['password_hash'], current_password):
+            return jsonify({'error': 'Неверный текущий пароль'}), 400
+
+        cnx.execute(
+            'UPDATE users SET password_hash = ? WHERE id = ?',
+            (generate_password_hash(new_password), session['user_id']),
+        )
+        cnx.commit()
+        return jsonify({'status': 'ok'})
+    except sqlite3.Error as e:
+        cnx.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cnx.close()
 
 
 @app.route('/api/balance')
@@ -237,14 +344,14 @@ def api_topup():
     cur = cnx.cursor()
     try:
         cur.execute(
-            'UPDATE users SET balance = balance + %s WHERE id = %s',
+            'UPDATE users SET balance = balance + ? WHERE id = ?',
             (amount, session['user_id'])
         )
         cnx.commit()
-        cur.execute('SELECT balance FROM users WHERE id = %s', (session['user_id'],))
+        cur.execute('SELECT balance FROM users WHERE id = ?', (session['user_id'],))
         new_balance = float(cur.fetchone()[0])
         return jsonify({'status': 'ok', 'balance': new_balance})
-    except Error as e:
+    except sqlite3.Error as e:
         cnx.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -321,9 +428,7 @@ def api_debug():
     info = {
         'mistral_key_set': bool(MISTRAL_API_KEY),
         'mistral_key_prefix': MISTRAL_API_KEY[:8] if MISTRAL_API_KEY else '',
-        'db_host': DB_CONFIG['host'],
-        'db_name': DB_CONFIG['database'],
-        'db_user': DB_CONFIG['user'],
+        'db_path': DB_PATH,
     }
     cnx = get_db_connection()
     if not cnx:
@@ -332,19 +437,19 @@ def api_debug():
 
     try:
         cur = cnx.cursor()
-        cur.execute("SHOW TABLES LIKE 'users'")
+        cur.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'users'")
         info['users_table'] = '✅ есть' if cur.fetchone() else '❌ нет'
 
         if info['users_table'].startswith('✅'):
-            cur.execute("SHOW COLUMNS FROM users LIKE 'balance'")
-            info['balance_column'] = '✅ есть' if cur.fetchone() else '❌ нет'
+            columns = {row['name'] for row in cur.execute("PRAGMA table_info(users)")}
+            info['balance_column'] = '✅ есть' if 'balance' in columns else '❌ нет'
 
             cur.execute("SELECT COUNT(*) FROM users")
             info['users_count'] = cur.fetchone()[0]
 
         info['db_status'] = '✅ OK'
         cur.close()
-    except Error as e:
+    except sqlite3.Error as e:
         info['db_status'] = f'❌ {e}'
     finally:
         cnx.close()
@@ -357,7 +462,7 @@ if __name__ == '__main__':
     print("=" * 50)
     print("  NeuroAPI — запуск")
     print("=" * 50)
-    print(f"  БД: {DB_CONFIG['user']}@{DB_CONFIG['host']}/{DB_CONFIG['database']}")
+    print(f"  Локальная БД: {DB_PATH}")
     print(f"  Mistral ключ: {'✅ задан' if MISTRAL_API_KEY else '❌ НЕ ЗАДАН'}")
     print("-" * 50)
 

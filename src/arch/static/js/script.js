@@ -21,8 +21,8 @@ $(document).ready(function() {
             valid = false;
         }
 
-        if (password.length < 6) {
-            showError('password', 'Пароль должен быть длиннее 6 символов');
+        if (password.length < 8) {
+            showError('password', 'Пароль должен быть не короче 8 символов');
             valid = false;
         }
 
@@ -46,8 +46,9 @@ $(document).ready(function() {
                     alert('Регистрация прошла успешно! Теперь вы можете войти.');
                     window.location.href = '/login';
                 },
-                error: function() {
-                    alert('Ошибка на сервере. Попробуйте позже.');
+                error: function(xhr) {
+                    const err = xhr.responseJSON;
+                    alert((err && (err.message || err.error)) || 'Ошибка на сервере. Попробуйте позже.');
                 }
             });
         }
@@ -99,7 +100,7 @@ $(document).ready(function() {
     });
     function showError(inputId, message) {
         $(`#${inputId}`).css('border-color', '#dc3545');
-        $(`#${input_id}-error`).text(message).show();
+        $(`#${inputId}-error`).text(message).show();
     }
 });
 // Мобильное меню (бургер)

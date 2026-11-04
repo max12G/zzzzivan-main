@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="/static/js/theme.js"></script>
 </head>
 <body>
 
@@ -21,26 +22,21 @@
 
         <nav class="sidebar-nav">
             <div class="nav-group-title">Рабочее пространство</div>
-            <a href="#" class="nav-item active"><i class="ri-chat-3-line"></i><span>Чат</span></a>
-            <a href="#" class="nav-item"><i class="ri-robot-2-line"></i><span>Модели</span></a>
-            <a href="#" class="nav-item"><i class="ri-key-2-line"></i><span>API-ключи</span></a>
+            <a href="/dashboard" class="nav-item active"><i class="ri-chat-3-line"></i><span>Чат</span></a>
 
             <div class="nav-group-title">Аккаунт</div>
-            <a href="#" class="nav-item"><i class="ri-wallet-3-line"></i><span>Платежи</span></a>
-            <a href="#" class="nav-item"><i class="ri-settings-3-line"></i><span>Настройки</span></a>
-            <a href="https://openrouter.ai/docs" target="_blank" class="nav-item">
-                <i class="ri-book-2-line"></i><span>Документация</span>
-            </a>
+            <a href="/profile" class="nav-item"><i class="ri-settings-3-line"></i><span>Профиль</span></a>
         </nav>
 
         <div class="sidebar-footer">
-            <div class="user-card">
+            <a href="/profile" class="user-card profile-link" title="Открыть профиль">
                 <div class="avatar">{{ (username or 'U')[0]|upper }}</div>
                 <div class="user-info">
                     <div class="user-name">{{ username or 'Пользователь' }}</div>
-                    <div class="user-plan"><i class="ri-flashlight-line"></i> Mistral Free</div>
+                    <div class="user-email">{{ email or 'Открыть профиль' }}</div>
                 </div>
-            </div>
+                <i class="ri-arrow-right-s-line profile-link-icon"></i>
+            </a>
             <a href="/logout" class="nav-item nav-logout">
                 <i class="ri-logout-box-r-line"></i><span>Выйти</span>
             </a>
@@ -62,10 +58,12 @@
                     <option value="{{ m.id }}" title="{{ m.desc }}">{{ m.name }}</option>
                     {% endfor %}
                 </select>
-                <span class="badge-free">MISTRAL</span>
             </div>
 
             <div class="topbar-right">
+                <button class="icon-btn theme-toggle" data-theme-toggle aria-label="Включить тёмную тему" title="Тема">
+                    <i class="ri-moon-line"></i>
+                </button>
                 <div class="balance-chip" title="Баланс">
                     <i class="ri-wallet-3-line"></i>
                     <span id="balanceChip">{{ '%.2f'|format(balance or 0) }} ₽</span>
@@ -137,7 +135,7 @@
 
         <div class="modal-icon"><i class="ri-wallet-3-line"></i></div>
         <div class="modal-title">Пополнение баланса</div>
-        <div class="modal-subtitle">Оплата картой, СБП или криптой</div>
+        <div class="modal-subtitle">Средства будут добавлены на ваш локальный баланс</div>
 
         <form id="topupForm">
             <div class="preset-grid">

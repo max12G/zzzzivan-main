@@ -54,9 +54,21 @@ $(document).ready(function () {
             toast('Минимальная сумма — 100 ₽', 'error');
             return;
         }
-        // Здесь можно вызвать /api/topup и получить ссылку на оплату
-        toast(`Запрос на пополнение на ${formatMoney(amount)} ₽ отправлен`, 'success');
-        closeTopup();
+        $.ajax({
+            url: '/api/topup',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ amount }),
+            success: function (data) {
+                $('#balanceChip').text(formatMoney(data.balance) + ' ₽');
+                toast(`Баланс пополнен на ${formatMoney(amount)} ₽`, 'success');
+                closeTopup();
+            },
+            error: function (xhr) {
+                const message = xhr.responseJSON?.error || 'Не удалось пополнить баланс';
+                toast(message, 'error');
+            },
+        });
     });
 
     // ============ ЧАТ: ОТПРАВКА ============
