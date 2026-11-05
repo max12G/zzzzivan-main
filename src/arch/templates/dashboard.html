@@ -51,13 +51,9 @@
         <header class="topbar">
             <button class="icon-btn menu-toggle" id="menuToggle"><i class="ri-menu-line"></i></button>
 
-            <div class="model-picker">
+            <div class="model-name">
                 <i class="ri-robot-2-line"></i>
-                <select id="modelSelect">
-                    {% for m in models %}
-                    <option value="{{ m.id }}" title="{{ m.desc }}">{{ m.name }}</option>
-                    {% endfor %}
-                </select>
+                <span>Qwen3 1.7B</span>
             </div>
 
             <div class="topbar-right">
@@ -87,7 +83,7 @@
                         <i class="ri-sparkling-2-line"></i>
                     </div>
                     <h2>Чем помочь?</h2>
-                    <p>Задайте вопрос, и одна из бесплатных моделей ответит. Все модели доступны без оплаты.</p>
+                    <p>Задайте вопрос локальной модели Qwen3.</p>
 
                     <div class="quick-prompts">
                         <button class="quick-prompt" data-prompt="Объясни, что такое API простыми словами">
@@ -120,7 +116,7 @@
                     </button>
                 </form>
                 <div class="chat-hint">
-                    Модели могут ошибаться. Проверяйте важную информацию.
+                    10 токенов = 1 ₽. Модель может ошибаться — проверяйте важную информацию.
                 </div>
             </div>
         </div>

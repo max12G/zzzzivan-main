@@ -6,7 +6,6 @@ $(document).ready(function () {
     const $input = $('#chatInput');
     const $form = $('#chatForm');
     const $sendBtn = $('#sendBtn');
-    const $modelSelect = $('#modelSelect');
 
     // История диалога в формате OpenAI: [{role, content}, ...]
     let conversation = [];
@@ -136,7 +135,6 @@ $(document).ready(function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: $modelSelect.val(),
                     messages: conversation,
                 }),
                 signal: abortController.signal,
@@ -169,6 +167,9 @@ $(document).ready(function () {
                     try {
                         const json = JSON.parse(payload);
                         if (json.error) throw new Error(json.error);
+                        if (typeof json.balance === 'number') {
+                            $('#balanceChip').text(formatMoney(json.balance) + ' ₽');
+                        }
                         if (json.delta) {
                             fullText += json.delta;
                             renderStreaming($content, fullText);

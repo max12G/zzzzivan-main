@@ -1,34 +1,73 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
-import os, json, requests, traceback
+import json
+import os
+import threading
+import traceback
+from pathlib import Path
+
+import requests
 from dotenv import load_dotenv
+from llama_cpp import Llama
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'tvoja_super_sekretnaja_kluch_fraza_2026')
 
-# ============ MISTRAL LA PLATEFORME ============
-MISTRAL_API_KEY = os.environ.get('MISTRAL_API_KEY', '').strip()
-MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions'
+MODEL_DIR = Path(__file__).resolve().parent / 'models'
+MODEL_FILENAME = 'Qwen3-1.7B-Q4_K_M.gguf'
+MODEL_PATH = MODEL_DIR / MODEL_FILENAME
+MODEL_URL = (
+    'https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/'
+    f'{MODEL_FILENAME}?download=true'
+)
+_llm = None
+_llm_lock = threading.Lock()
 
-# ============ ЛОКАЛЬНАЯ БД ============
 DB_PATH = os.environ.get(
     'LOCAL_DB_PATH',
     os.path.join(os.path.dirname(__file__), 'data', 'app.db'),
 )
 
-MODELS = [
-    {'id': 'mistral-small-latest', 'name': 'Mistral Small',      'vendor': 'Mistral', 'desc': 'Умная модель общего назначения'},
-    {'id': 'open-mistral-nemo',    'name': 'Mistral NeMo 12B',   'vendor': 'Mistral', 'desc': 'Быстрая, контекст 128K'},
-    {'id': 'ministral-8b-latest',  'name': 'Ministral 8B',       'vendor': 'Mistral', 'desc': 'Баланс скорости и качества'},
-    {'id': 'ministral-3b-latest',  'name': 'Ministral 3B',       'vendor': 'Mistral', 'desc': 'Самая быстрая, лёгкая'},
-    {'id': 'open-mixtral-8x7b',    'name': 'Mixtral 8x7B',       'vendor': 'Mistral', 'desc': 'MoE-архитектура'},
-    {'id': 'open-mixtral-8x22b',   'name': 'Mixtral 8x22B',      'vendor': 'Mistral', 'desc': 'Мощная MoE-модель'},
-    {'id': 'codestral-latest',     'name': 'Codestral',          'vendor': 'Mistral', 'desc': 'Специализация — код'},
-    {'id': 'pixtral-12b-2409',     'name': 'Pixtral 12B (Vision)','vendor': 'Mistral', 'desc': 'Понимает изображения'},
-]
+def ensure_model() -> Path:
+    if MODEL_PATH.is_file() and MODEL_PATH.stat().st_size > 0:
+        return MODEL_PATH
+
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    partial_path = MODEL_PATH.with_suffix('.gguf.part')
+    print(f'[MODEL] Скачивание {MODEL_FILENAME} с Hugging Face…(я сам ждал примерно минуты 2-3)')
+    try:
+        with requests.get(MODEL_URL, stream=True, timeout=(15, 180)) as response:
+            response.raise_for_status()
+            with partial_path.open('wb') as model_file:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        model_file.write(chunk)
+        if partial_path.stat().st_size == 0:
+            raise RuntimeError('Hugging Face вернул пустой файл модели')
+        partial_path.replace(MODEL_PATH)
+    except (OSError, requests.RequestException) as error:
+        if partial_path.exists():
+            partial_path.unlink()
+        raise RuntimeError(f'Не удалось скачать модель: {error}') from error
+
+    print(f'[MODEL] Модель сохранена: {MODEL_PATH}')
+    return MODEL_PATH
+
+
+def get_llm() -> Llama:
+    global _llm
+    with _llm_lock:
+        if _llm is None:
+            _llm = Llama(
+                model_path=str(ensure_model()),
+                n_ctx=4096,
+                n_threads=0,
+                verbose=False,
+            )
+        return _llm
 
 
 def get_db_connection():
@@ -42,9 +81,7 @@ def get_db_connection():
         return None
 
 
-# ============ АВТОСОЗДАНИЕ ТАБЛИЦЫ ============
 def ensure_schema():
-    """Создаёт таблицу users и колонку balance, если их нет."""
     cnx = get_db_connection()
     if not cnx:
         print("[DB] Не удалось подключиться — БД не настроена или недоступна")
@@ -52,7 +89,6 @@ def ensure_schema():
 
     cur = cnx.cursor()
     try:
-        # Создаём таблицу users
         cur.execute("""
             CREATE TABLE IF NOT EXISTS `users` (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,14 +100,13 @@ def ensure_schema():
             )
         """)
 
-        # Проверяем, есть ли колонка balance (если таблица была создана ранее)
         columns = {row['name'] for row in cur.execute("PRAGMA table_info(users)")}
         if 'balance' not in columns:
             print("[DB] Добавляю колонку balance…")
             cur.execute("ALTER TABLE users ADD COLUMN balance REAL NOT NULL DEFAULT 0")
 
         cnx.commit()
-        print("[DB] Схема готова ✅")
+        print("[DB] Схема готова")
         return True
     except sqlite3.Error as e:
         print(f"[DB] Ошибка при создании схемы: {e}")
@@ -81,7 +116,6 @@ def ensure_schema():
         cur.close(); cnx.close()
 
 
-# ============ РЕГИСТРАЦИЯ / ВХОД / ВЫХОД ============
 
 @app.route('/user_register', methods=['POST'])
 def user_register():
@@ -158,8 +192,6 @@ def logout():
     return redirect(url_for('login'))
 
 
-# ============ СТРАНИЦЫ ============
-
 @app.route("/")
 def registration():
     return render_template('registration.html')
@@ -185,6 +217,35 @@ def get_balance():
         cur.close(); cnx.close()
 
 
+def deduct_tokens(user_id: int, token_count: int) -> float:
+    """Charge 0.1 RUB per generated token and return the new balance."""
+    cost = token_count / 10
+    cnx = get_db_connection()
+    if not cnx:
+        raise RuntimeError('Ошибка подключения к БД')
+
+    try:
+        cur = cnx.cursor()
+        cur.execute(
+            'UPDATE users SET balance = balance - ? '
+            'WHERE id = ? AND balance >= ?',
+            (cost, user_id, cost),
+        )
+        if cur.rowcount != 1:
+            cnx.rollback()
+            raise RuntimeError('Недостаточно средств для оплаты ответа')
+        cnx.commit()
+        row = cur.execute(
+            'SELECT balance FROM users WHERE id = ?', (user_id,)
+        ).fetchone()
+        return float(row[0]) if row else 0.0
+    except sqlite3.Error as error:
+        cnx.rollback()
+        raise RuntimeError(f'Ошибка списания баланса: {error}') from error
+    finally:
+        cnx.close()
+
+
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
@@ -193,7 +254,6 @@ def dashboard():
         'dashboard.html',
         username=session.get('username'),
         email=session.get('email'),
-        models=MODELS,
         balance=get_balance(),
     )
 
@@ -203,15 +263,6 @@ def profile():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template('profile.html', username=session.get('username'))
-
-
-# ============ API: МОДЕЛИ / БАЛАНС / ПОПОЛНЕНИЕ ============
-
-@app.route('/api/models')
-def api_models():
-    if 'user_id' not in session:
-        return jsonify({'error': 'Не авторизован'}), 401
-    return jsonify({'models': MODELS})
 
 
 @app.route('/api/profile')
@@ -358,61 +409,48 @@ def api_topup():
         cur.close(); cnx.close()
 
 
-# ============ API: ЧАТ С MISTRAL ============
-
 @app.route('/api/chat', methods=['POST'])
 def chat():
     if 'user_id' not in session:
         return jsonify({'error': 'Не авторизован'}), 401
 
-    if not MISTRAL_API_KEY:
-        return jsonify({'error': 'Не задан MISTRAL_API_KEY в .env'}), 500
-
     data = request.get_json(silent=True) or {}
     messages = data.get('messages', [])
-    model = data.get('model', MODELS[0]['id'])
 
-    if not messages:
+    if not isinstance(messages, list) or not messages:
         return jsonify({'error': 'Пустой запрос'}), 400
 
-    allowed = {m['id'] for m in MODELS}
-    if model not in allowed:
-        model = MODELS[0]['id']
+    balance = get_balance()
+    max_tokens = min(1024, int(balance * 10))
+    if max_tokens < 1:
+        return jsonify({'error': 'Недостаточно средств. Пополните баланс.'}), 402
 
-    headers = {
-        'Authorization': f'Bearer {MISTRAL_API_KEY}',
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-    }
-    payload = {'model': model, 'messages': messages, 'stream': True}
+    user_id = session['user_id']
+    try:
+        llm = get_llm()
+    except (OSError, RuntimeError, ValueError) as error:
+        return jsonify({'error': str(error)}), 500
 
     def stream():
         try:
-            with requests.post(MISTRAL_URL, headers=headers, json=payload,
-                               stream=True, timeout=180) as r:
-                if r.status_code != 200:
-                    yield f"data: {json.dumps({'error': f'Mistral {r.status_code}: {r.text[:400]}'})}\n\n"
-                    yield "data: [DONE]\n\n"
-                    return
-
-                for raw in r.iter_lines(decode_unicode=True):
-                    if not raw or not raw.startswith('data: '):
-                        continue
-                    chunk = raw[6:].strip()
-                    if chunk == '[DONE]':
-                        yield "data: [DONE]\n\n"
-                        return
-                    try:
-                        parsed = json.loads(chunk)
-                    except json.JSONDecodeError:
-                        continue
-                    delta = (parsed.get('choices') or [{}])[0].get('delta', {})
-                    content = delta.get('content')
-                    if content:
-                        yield f"data: {json.dumps({'delta': content})}\n\n"
-                yield "data: [DONE]\n\n"
-        except requests.exceptions.RequestException as e:
-            yield f"data: {json.dumps({'error': f'Сеть: {e}'})}\n\n"
+            full_text = ''
+            for chunk in llm.create_chat_completion(
+                messages=messages,
+                stream=True,
+                max_tokens=max_tokens,
+                temperature=0.7,
+            ):
+                delta = (chunk.get('choices') or [{}])[0].get('delta', {})
+                content = delta.get('content')
+                if content:
+                    full_text += content
+                    yield f"data: {json.dumps({'delta': content})}\n\n"
+            token_count = len(llm.tokenize(full_text.encode('utf-8'), add_bos=False))
+            new_balance = deduct_tokens(user_id, token_count)
+            yield f"data: {json.dumps({'balance': new_balance, 'tokens': token_count})}\n\n"
+            yield "data: [DONE]\n\n"
+        except (RuntimeError, ValueError, OSError) as error:
+            yield f"data: {json.dumps({'error': f'Ошибка генерации: {error}'})}\n\n"
             yield "data: [DONE]\n\n"
 
     return Response(stream(), mimetype='text/event-stream', headers={
@@ -421,56 +459,18 @@ def chat():
     })
 
 
-# ============ ДИАГНОСТИКА ============
-@app.route('/api/debug')
-def api_debug():
-    """Открой в браузере /api/debug — покажет состояние сервера."""
-    info = {
-        'mistral_key_set': bool(MISTRAL_API_KEY),
-        'mistral_key_prefix': MISTRAL_API_KEY[:8] if MISTRAL_API_KEY else '',
-        'db_path': DB_PATH,
-    }
-    cnx = get_db_connection()
-    if not cnx:
-        info['db_status'] = '❌ ОШИБКА ПОДКЛЮЧЕНИЯ'
-        return jsonify(info)
-
-    try:
-        cur = cnx.cursor()
-        cur.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'users'")
-        info['users_table'] = '✅ есть' if cur.fetchone() else '❌ нет'
-
-        if info['users_table'].startswith('✅'):
-            columns = {row['name'] for row in cur.execute("PRAGMA table_info(users)")}
-            info['balance_column'] = '✅ есть' if 'balance' in columns else '❌ нет'
-
-            cur.execute("SELECT COUNT(*) FROM users")
-            info['users_count'] = cur.fetchone()[0]
-
-        info['db_status'] = '✅ OK'
-        cur.close()
-    except sqlite3.Error as e:
-        info['db_status'] = f'❌ {e}'
-    finally:
-        cnx.close()
-
-    return jsonify(info)
-
-
-# ============ СТАРТ ============
 if __name__ == '__main__':
     print("=" * 50)
     print("  NeuroAPI — запуск")
     print("=" * 50)
     print(f"  Локальная БД: {DB_PATH}")
-    print(f"  Mistral ключ: {'✅ задан' if MISTRAL_API_KEY else '❌ НЕ ЗАДАН'}")
+    print(f"  Локальная модель: {MODEL_FILENAME}")
     print("-" * 50)
 
-    ensure_schema()   # ← автосоздание таблицы и колонки balance
+    ensure_schema()
 
     print("-" * 50)
     print("  Сервер: http://127.0.0.1:5000")
-    print("  Диагностика: http://127.0.0.1:5000/api/debug")
-    print("=" * 50)
+    print("-" * 50)
 
     app.run(debug=True, host='0.0.0.0', port=5000)

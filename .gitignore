@@ -1,2 +1,5 @@
 .venv/*
 src/arch/data/*.db
+src/arch/models/*.gguf
+src/arch/models/*.part
+src/arch/.env
